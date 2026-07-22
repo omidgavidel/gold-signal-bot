@@ -1,1 +1,1 @@
-# gold-signal-bot
+ gold-signal-bot
