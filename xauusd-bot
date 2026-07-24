@@ -1,1 +1,104 @@
-main.py
+mport requests
+import pandas as pd
+import ta
+TELEGRAM_TOKEN = "8724005712:AAHrzvK6BWNKkCx-JZkyqpZpQpvRnFKkybE"
+CHAT_ID = "5840426117"
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+    requests.post(url, data=data)
+API_KEY = "c2a2b5c6faf24b0ba466323b479761d4"
+
+url = f"https://api.twelvedata.com/time_series?symbol=XAU/USD&interval=15min&apikey={API_KEY}&outputsize=500"
+
+data = requests.get(url).json()
+
+df = pd.DataFrame(data["values"])
+df = df.iloc[::-1]
+
+df["close"] = df["close"].astype(float)
+
+
+# MACD دیفالت 12/26/9
+macd = ta.trend.MACD(
+    df["close"],
+    window_fast=12,
+    window_slow=26,
+    window_sign=9
+)
+
+df["macd"] = macd.macd()
+df["signal"] = macd.macd_signal()
+df["hist"] = macd.macd_diff()
+
+
+# MACD چهار برابر 48/104/36
+macd4 = ta.trend.MACD(
+    df["close"],
+    window_fast=48,
+    window_slow=104,
+    window_sign=36
+)
+
+df["macd4"] = macd4.macd()
+df["signal4"] = macd4.macd_signal()
+
+
+state = "NONE"
+
+
+# پیدا کردن آخرین کراس MACD 4X
+for i in range(100, len(df)-1):
+
+    before = df.iloc[i]
+    after = df.iloc[i+1]
+
+    # کراس صعودی
+    if before["macd4"] < before["signal4"] and after["macd4"] > after["signal4"]:
+        state = "WAITING FOR BUY"
+
+    # کراس نزولی
+    if before["macd4"] > before["signal4"] and after["macd4"] < after["signal4"]:
+        state = "WAITING FOR SELL"
+
+
+signal = "NONE"
+
+
+# شرط BUY
+if state == "WAITING FOR BUY":
+
+    if (
+        df.iloc[-2]["macd"] < 0
+        and df.iloc[-2]["hist"] < 0
+        and df.iloc[-1]["hist"] > df.iloc[-2]["hist"]
+    ):
+        signal = "BUY"
+
+
+# شرط SELL
+if state == "WAITING FOR SELL":
+
+    if (
+        df.iloc[-2]["macd"] > 0
+        and df.iloc[-2]["hist"] > 0
+        and df.iloc[-1]["hist"] < df.iloc[-2]["hist"]
+    ):
+        signal = "SELL"
+
+
+print("----------------")
+print("STATE:", state)
+print("SIGNAL:", signal)
+if signal == "BUY":
+    send_telegram("🟢 BUY XAUUSD\nقیمت: " + str(df.iloc[-1]["close"]))
+
+if signal == "SELL":
+    send_telegram("🔴 SELL XAUUSD\nقیمت: " + str(df.iloc[-1]["close"]))
+print("PRICE:", df.iloc[-1]["close"])
+print("MACD:", df.iloc[-1]["macd"])
+print("HIST:", df.iloc[-1]["hist"])
+print("PREV HIST:", df.iloc[-2]["hist"])i
